@@ -1,0 +1,194 @@
+﻿using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace TaskPattern
+{
+    // Método Delegado para informe de progreso
+    public delegate void ProgressReport(int percentage, string message);
+    
+    // Método Delegado para notificación de terminación incluyendo caso de excepción
+    public delegate void FinishTask(AbstractTask abstractTask, Exception error);
+
+    // La clase abstracta de la que derivar
+    public abstract class AbstractTask
+    {
+        // Gestión de estado y atributos privados
+        private Task m_Task = null;
+        private CancellationTokenSource m_Cts = null;
+        private readonly object m_Lock = new object();
+        private bool m_IsExecuting = false;
+        private bool m_IsCompleted = false;
+        private Exception m_ExecutionError = null;
+
+        // Eventos Públicos
+        public event FinishTask OnFinishTask;
+        public event ProgressReport OnProgress;
+
+        // Propiedades Públicas
+        public bool IsExecuting => m_IsExecuting;
+        public bool IsCompleted => m_IsCompleted;
+        public bool IsFaulted => m_ExecutionError != null;
+        public Exception ExecutionError => m_ExecutionError;
+
+        // Método de Ejecución Principal asincrónico y concurrente
+        public async Task ExecuteAsync(CancellationToken cancellationToken = default)
+        {
+            // Región crítica para ejecución Thread-safe
+            // Sólo un proceso a la vez
+            lock (m_Lock)
+            {
+                if (m_IsExecuting)
+                    throw new InvalidOperationException("Task is already executing.");
+
+                if (m_IsCompleted && m_ExecutionError == null)
+                    throw new InvalidOperationException("Task already completed successfully. Create a new instance for re-execution.");
+
+                // Resetear el estado para la re-ejecución
+                m_IsExecuting = true;
+                m_IsCompleted = false;
+                m_ExecutionError = null;
+                // EL cancellation token está linked para aceptar cancelación del sistema
+                m_Cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            }
+
+            try
+            {
+                // Ejecutar el trabajo asincrónico
+                await FinishTaskAsync(m_Cts.Token).ConfigureAwait(false);
+                
+                // Marcarlo como completado
+                lock (m_Lock)
+                {
+                    m_IsExecuting = false;
+                    m_IsCompleted = true;
+                }
+                
+                // Dispara el evento de terminado sin error
+                OnFinishTask?.Invoke(this, null);
+            }
+            // Si hay excepción
+            catch (Exception ex)
+            {
+                // Gestionar los errores
+                lock (m_Lock)
+                {
+                    m_IsExecuting = false;
+                    m_ExecutionError = ex;
+                }
+                
+                // Dispara el evento de terminado CON error
+                OnFinishTask?.Invoke(this, ex);
+                
+                // Re-lanzar la excepción si el invocador quiere administrarla
+                throw;
+            }
+            finally
+            {
+                // Disponer del generador de cancellation tokens
+                m_Cts?.Dispose();
+                m_Cts = null;
+            }
+        } // Ends ExecuteAsync
+
+        // Wrapper Sincrónico para compatibilidad con programación sincrónica
+        public void Execute(CancellationToken cancellationToken = default)
+        {
+            // Fire-and-forget pero con gestión de errores vía Wait()
+            m_Task = ExecuteAsync(cancellationToken).ContinueWith(t =>
+            {
+                // Registrar o manejar las excepciones no observadas (asincrónicas)
+                if (t.IsFaulted && t.Exception != null)
+                {
+                    // Se debería hacer un log de esto o comunicar de alguna forma
+                    Console.WriteLine($"Unhandled exception: {t.Exception.GetBaseException().Message}");
+                }
+            });
+        }
+
+        // Espera sincrónica Legacy 
+        public void WaitForFinish()
+        {
+            if (m_Task != null)
+            {
+                m_Task.Wait();
+            }
+            else
+            {
+                // Alternativa: si no se llamó a Execute, usar la versión asíncrona
+                // Esta es una llamada bloqueante para mantener la compatibilidad con programación sincrónica
+                ExecuteAsync().Wait();
+            }
+        }
+
+        // Async espera asincrónica
+        public async Task WaitForFinishAsync()
+        {
+            if (m_Task != null)
+            {
+                await m_Task.ConfigureAwait(false);
+            }
+            else
+            {
+                await ExecuteAsync().ConfigureAwait(false);
+            }
+        }
+
+        // Método de ejecución de la Tarea de Trabajo asincrónica con cancellation
+        private async Task FinishTaskAsync(CancellationToken cancellationToken)
+        {
+            // Informar del progreso inicial (Nada... que comenzó...)
+            ReportProgress(0, "Starting...");
+            
+            try
+            {
+                // LLamar al proceso asincrónico con soporte para información de avance/progreso.
+                await ProcessAsync(
+                    (percentage, message) => ReportProgress(percentage, message),
+                    cancellationToken
+                ).ConfigureAwait(false);
+                
+                // Informar que terminó
+                ReportProgress(100, "Complete!");
+            }
+            catch (OperationCanceledException)
+            {
+                // Informar que Canceló
+                ReportProgress(0, "Cancelled!");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Informar que falló
+                // Informar del error
+                // DESARROLLAR MAS ESTO
+                ReportProgress(0, $"Error: {ex.Message}");
+                throw;
+            }
+        } // Ends FinishTaskAsync
+
+        // Helper de reporte de avance
+        private void ReportProgress(int percentage, string message)
+        {
+            OnProgress?.Invoke(
+                Math.Clamp(percentage, 0, 100),
+                message ?? string.Empty
+            );
+        }
+        
+        // Método de Procesamiento Asincrónica Abstracto.
+        // Derivar de este la implementación ...
+        protected abstract Task ProcessAsync(ProgressReport progressReport,
+            CancellationToken cancellationToken);
+        
+        // Opcional: proceso sincrónico legacy para programación sincrónica
+        // Marcar como obsoleto para fomentar la migración a asíncrono
+        [Obsolete("Use ProcessAsync instead")]
+        protected virtual void Process()
+        {
+            throw new NotImplementedException("Use ProcessAsync instead");
+        }
+    } // Ends public abstract class AbstractTask 
+}
+
+// =========================== FIN DE AbstractTask ===============================

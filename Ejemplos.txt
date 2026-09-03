@@ -1,0 +1,126 @@
+// Cancellation
+static async Task Main(string[] args)
+{
+    using var cts = new CancellationTokenSource();
+    var myTask = new MagicNumberTask();
+    myTask.OnProgress += (p, m) => Console.WriteLine($"[Progress] {p}%: {m}");
+    myTask.OnFinishTask += (task, result, error) =>
+    {
+        if (error is OperationCanceledException) Console.WriteLine("[Completion] Task was cancelled!");
+        else if (error != null) Console.WriteLine($"[Completion] Task failed: {error.Message}");
+        else Console.WriteLine($"[Completion] Task completed with result: {result}");
+    };
+    var task = myTask.ExecuteAsync(cts.Token);
+    await Task.Delay(2000); cts.Cancel();
+    try
+    {
+        int result = await task;
+        Console.WriteLine($"Result: {result}");
+    }
+    catch (OperationCanceledException)
+    {
+        Console.WriteLine("Task cancelled!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Exception Error: {ex.Message}");
+    }
+    Console.WriteLine("\nProgram finished!");
+}
+// ======================================================================
+// Main Other
+static async Task Main(string[] args)
+{
+    using var cts = new CancellationTokenSource();
+    var myTask = new MagicNumberTask();
+    myTask.OnProgress += (p, m) => Console.WriteLine($"[Progress] {p}%: {m}");
+    myTask.OnFinishTask += (task, result, error) =>
+    {
+       if (error is OperationCanceledException) Console.WriteLine("[Completion] Task was cancelled!");
+       else if (error != null) Console.WriteLine($"[Completion] Task failed: {error.Message}");
+       else Console.WriteLine($"[Completion] Task completed with result: {result}");
+    };
+    var task = myTask.ExecuteAsync(cts.Token);
+    int loopCounter = 0;
+    while (!task.IsCompleted && !task.IsFaulted)
+    {
+        loopCounter++;
+        await Task.Delay(300);
+        if (loopCounter > 20) break; // max cant loops
+    }
+    if (task.IsFaulted) Console.WriteLine("[Main] Something went wrong with Process!");
+    else Console.WriteLine("[Main] Main and Process completed!");
+    try
+    {
+       int result = await task;
+       Console.WriteLine($"Result: {result}");
+    }
+    catch (OperationCanceledException)
+    {
+       Console.WriteLine("Task cancelled!");
+    }
+    catch (Exception ex)
+    {
+       Console.WriteLine($"Exception Error: {ex.Message}");
+    }
+    Console.WriteLine("\nProgram finished!");
+}
+// ======================================================================
+// Con Wait For Finish
+static async Task Main(string[] args)
+{
+  using var cts = new CancellationTokenSource();
+  var myTask = new MagicNumberTask();
+  myTask.OnProgress += (percentage, message) => { Console.WriteLine($"[Progress] {percentage}%: {message}"); };
+  myTask.OnFinishTask += (task, result, error) =>
+  {
+       if (error is OperationCanceledException) Console.WriteLine("[Completion] Task was cancelled!");
+       else if (error != null) Console.WriteLine($"[Completion] Task failed: {error.Message}");
+       else Console.WriteLine($"[Completion] Task completed with result: {result}");
+  };
+  myTask.Execute(cts.Token);
+  int loopCounter = 0;
+  while (!myTask.IsCompleted && !myTask.IsFaulted)
+  {
+      loopCounter++;
+      await Task.Delay(300); // Simulate work
+      if (myTask.IsExecuting)
+      {
+          Console.WriteLine($"  Main: Background task is still running... (loop #{loopCounter})");
+      }
+  }
+  try
+  {
+      int result = myTask.WaitForFinish();
+  }
+  catch (Exception ex)
+  {
+      Console.WriteLine($"Error getting result: {ex.Message}");
+  }
+}
+// ======================================================================
+// 
+public class MagicNumberTask : AbstractTask<int>
+{
+  protected override async Task<int> ProcessAsync(
+                  ProgressReport progressReport,
+                  CancellationToken cancellationToken)
+  {
+     progressReport(0, "Starting magic number generation...");
+     int totalSteps = 10;
+     int currentValue = 0;
+     for (int step = 1; step <= totalSteps; step++)
+     {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Task.Delay(500, cancellationToken);
+        int percentage = (int)((double)step / totalSteps * 100);
+        currentValue = step * 4 + 2; // Va a terminar en 42
+        progressReport(percentage, $"Processing step {step}/{totalSteps}, current value: {currentValue}");
+     }
+     progressReport(100, "Magic number generated successfully!");
+     // Devolvemos la respuesta al sentido de la vida, el universo y t0do lo demás (42)
+     return currentValue;
+  }
+}
+
+
