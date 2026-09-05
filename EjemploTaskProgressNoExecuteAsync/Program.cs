@@ -3,10 +3,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using TaskPattern;
 // #================================================================#
-// #   El ejemplo invoca a la tarea, con OnProgress y OnFinishTask  #
+// #   El ejemplo crea a la tarea, con OnProgress y OnFinishTask    #
 // #   mientras el main hace otras cosas. Cuando termina de hacer   #
-// #   sus cosas, allí hace await y entonces espera por el proceso  #
-// #   a terminar y devolver el valor.                              #
+// #   sus cosas, allí hace await y entonces se dispara el proceso  #
+// #   y espera que termine para devolver el valor.                 #
 // #----------------------------------------------------------------#
 // #   var task = new DownloadTask();                               #
 // #   task.OnProgress += (p, m) => ...                             #
@@ -20,7 +20,7 @@ internal class Program
     {
         // Uso
         // Instanciamos la clase, el progress, el onfinish  
-        var task = new DownloadTask();
+        var task = new DownloadTask(); // Pero no se dispara aquí
         task.OnProgress += (p, m) => Console.WriteLine($"[Progress] {p}%: {m}");
         task.OnFinishTask += (task, result, error) =>
         {
@@ -32,11 +32,12 @@ internal class Program
                 Console.WriteLine($"[Completion] Task completed with result: {result}");
         };
 
-        // Async/await way
         try
         {
             // espero a que termine
-            await task.ExecuteAsync();
+            Console.WriteLine("[Main] waiting fo Task!");
+            // Lazy Initialization ...
+            int result = await task.WaitForFinishAsync();
             Console.WriteLine("Task completed!");
         }
         catch (Exception ex)

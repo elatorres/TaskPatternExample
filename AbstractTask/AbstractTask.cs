@@ -37,16 +37,19 @@ namespace TaskPattern
         public TResult Result => m_Result;
         
         // #================================================================# 
-        // #   Método de Ejecución Principal asincrónico y concurrente      #
+        // #   ExecuteAsync maneja el ciclo de vida de la tarea. Gestiona   #
+        // #   el estado del objeto, sus eventos y errores.                 #
+        // #----------------------------------------------------------------#
         // #   ExecuteAsync: Recibe como parámetro el cancellation token    # 
-        // #   Verifica la no reentrantabilidad de la tarea (tiene una      # 
+        // #   Verifica la no reentrantabilidad de la tarea. Tiene una      # 
         // #   sola instancia de ejecución. Inicializa las variables de     #
-        // #   estado y crea un linked cancellation token. FinishTaskAsync  #
-        // #   invoca al método concreto (implementación del abstracto)     #
-        // #   espera a que termine, luego pone las variables para          #
-        // #   indicarlo, ejecuta la delegada para indicar la terminación   #
-        // #   y devuelve el resultado.                                     #
+        // #   estado y crea un linked cancellation token. Mediante el      #
+        // #   método FinishTaskAsync invoca a la tarea asincrónica, luego  #
+        // #   espera a que termine, pone las variables para indicarlo,     #
+        // #   ejecuta la delegada para indicar la terminación y devuelve   #
+        // #   el resultado.                                                #
         // #================================================================#
+        
         public async Task<TResult> ExecuteAsync(CancellationToken cancellationToken = default)
         {
             // Región crítica para ejecución Thread-safe
@@ -135,7 +138,8 @@ namespace TaskPattern
         // #================================================================#        
         // #   Espera sincrónica Legacy.                                    #
         // #   WaitForFinish: Simplemente espera por la ejecución de        #
-        // #   ExecuteAsync y su resultado                                  #
+        // #   Execute. Nótese que no hay resultado. En programación        #
+        // #   asincrónica usar await result,prefereiblemente.              #
         // #================================================================#
         public TResult WaitForFinish()
         {
@@ -161,20 +165,21 @@ namespace TaskPattern
             if (m_Task != null)
             {
                 // Esperar por la tarea existente a que complete, y devolver el resultado
-                return await m_Task.ConfigureAwait(false);
+                return await m_Task.ConfigureAwait(false); // Don't capture the context - continue on any thread pool thread
             }
             
             // Si no hay tarea iniciada, comenzar una ahora y esperar
-            return await ExecuteAsync().ConfigureAwait(false);
+            return await ExecuteAsync().ConfigureAwait(false); // Don't capture the context - continue on any thread pool thread
         }
         
-        // #================================================================#        
-        // #   Método de ejecución de la Tarea de Trabajo asincrónica con   #
-        // #   cancellationEspera asincrónica por el resultado              #
-        // #   FinishTaskAsync: Recibe el cancellation token, reporta el    #
-        // #   inicio de la tarea, y dispara el ProcessAsync que es el      #
-        // #   método concreto implementado, espera por la ejecución de     #
-        // #   este, y reporta el final del proceso y devuelve el resultado #
+        // #===============================================================#
+        // # FinishTaskAsync: es un wrapper para ProcessAsync. Gestiona el #
+        // # Progreso y la cancelación de la Tarea de Trabajo asincrónica  #
+        // #---------------------------------------------------------------#
+        // # FinishTaskAsync: Recibe el cancellation token, reporta el     #
+        // # inicio de la tarea, y dispara el ProcessAsync que es el       #
+        // # método concreto implementado, espera por la ejecución de      #
+        // # este, y reporta el final del proceso y devuelve el resultado  #
         // #================================================================#        
         private async Task<TResult> FinishTaskAsync(CancellationToken cancellationToken)
         {

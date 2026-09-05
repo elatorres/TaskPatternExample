@@ -33,21 +33,36 @@ namespace TaskPattern
             
             // Comenzamos la tarea y guardamos la referencia a la tarea en ejecución
             Console.WriteLine("\n📦 Starting background task...");
-            var runningTask = myTask.ExecuteAsync();  // ← devuelve promesa Task<int>
+            //var runningTask = 
+                myTask.Execute();  // setea m_Task y ejecuta sin asignación
+                // myTask.ExecuteAsync(); no setea m_Task y genera error en myTask.WaitForFinishAsync();
 
             // El Main hace otras cosas
             Console.WriteLine("🔄 Main thread doing work...");
-            for (int i = 1; i <= 3; i++)
+            //for (int i = 1; i <= 3; i++)
+            int i = 1;
+            while(!myTask.IsCompleted && i<200)
             {
                 await Task.Delay(400);
                 Console.WriteLine($"  Main iteration #{i} - Working...");
+                i++;
             }
 
             // espera por la tarea runningTask directamente - NO necesita WaitForFinishAsync!
             Console.WriteLine("\n⏳ Waiting for background task to finish...");
-            int result = await runningTask;  // ← Just await the task!
+            // int result = await runningTask;  // ← Just await the task!
+            // Siempre da error:
+            // Unhandled exception.
+            // System.InvalidOperationException: Task already completed successfully. Create a new instance for re-execution.
+            //
+            // var myTask = new MagicNumberTask();
+            // myTask.Execute();  
+            // await myTask.WaitForFinishAsync();  Usa m_Task si no es nulo; ERROR
+            //   
+            await myTask.WaitForFinishAsync();
             // Mostramos el resultado y ya
             Console.WriteLine("The Answer to the Ultimate Question of Life, the Universe, and Everything is ...");
+            int result = myTask.Result;
             Console.WriteLine($"\n🎉 Final Result: {result}");
             Console.WriteLine("🏁 Program finished!");
             Console.WriteLine("Press any key to exit...");
